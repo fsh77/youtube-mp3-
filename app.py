@@ -21,12 +21,6 @@ try:
 except ImportError:
     yt_dlp = None
 
-try:
-    import imageio_ffmpeg
-    FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
-except Exception:
-    FFMPEG_PATH = None
-
 app = Flask(__name__)
 
 # İndirilen dosyalar için klasör
@@ -438,20 +432,11 @@ def api_download():
     file_id  = str(uuid.uuid4())
     out_tmpl = os.path.join(DOWNLOAD_FOLDER, f'{file_id}.%(ext)s')
 
-    # Formatla eşleşen codec
-    codec_map = {'mp3': 'mp3', 'm4a': 'm4a', 'opus': 'opus', 'webm': 'opus'}
-    codec = codec_map[fmt]
-
     ydl_opts = {
-        'format':          'bestaudio/best',
-        'outtmpl':         out_tmpl,
-        'quiet':           True,
-        'no_warnings':     True,
-        'postprocessors': [{
-            'key':              'FFmpegExtractAudio',
-            'preferredcodec':   codec,
-            'preferredquality': '192',
-        }],
+        'format':      'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
+        'outtmpl':     out_tmpl,
+        'quiet':       True,
+        'no_warnings': True,
     }
 
     # YouTube bot korumasını aşmak için çerezleri kullan
@@ -459,28 +444,17 @@ def api_download():
     if cookies_file:
         ydl_opts['cookiefile'] = cookies_file
 
-    # imageio ile gelen ffmpeg binary'sini kullan
-    if FFMPEG_PATH:
-        ydl_opts['ffmpeg_location'] = FFMPEG_PATH
-
+    title = 'ses'
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info  = ydl.extract_info(url, download=True)
             title = safe_name(info.get('title', 'ses'))
+            fmt   = info.get('ext', 'm4a')
     except Exception as exc:
-        # ffmpeg yoksa dönüşümsüz dene
-        ydl_opts.pop('postprocessors', None)
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info  = ydl.extract_info(url, download=True)
-                title = safe_name(info.get('title', 'ses'))
-                ext   = info.get('ext', 'webm')
-                fmt   = ext
-        except Exception as exc2:
-            if cookies_file:
-                try: os.remove(cookies_file)
-                except: pass
-            return jsonify({'error': str(exc2)}), 500
+        if cookies_file:
+            try: os.remove(cookies_file)
+            except: pass
+        return jsonify({'error': str(exc)}), 500
     finally:
         if cookies_file:
             try: os.remove(cookies_file)
