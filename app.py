@@ -53,9 +53,15 @@ def safe_name(s):
     return s.strip()[:60] or 'audio'
 
 # ---------------------------------------------------------------
-# Çerez dosyası (Render env var'dan)
+# Çerez dosyası — Render Secret File veya env var
 # ---------------------------------------------------------------
 def get_cookies_file():
+    # Render Secret Files (en güvenilir yol)
+    secret_path = '/etc/secrets/cookies.txt'
+    if os.path.exists(secret_path):
+        return secret_path
+
+    # Fallback: env var (tek satır olduğunda çalışır)
     content = os.environ.get('YT_COOKIES', '').strip()
     if not content:
         return None
