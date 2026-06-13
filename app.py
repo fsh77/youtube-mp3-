@@ -21,6 +21,12 @@ try:
 except ImportError:
     yt_dlp = None
 
+try:
+    import imageio_ffmpeg
+    FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
+except Exception:
+    FFMPEG_PATH = None
+
 app = Flask(__name__)
 
 # İndirilen dosyalar için klasör
@@ -452,6 +458,10 @@ def api_download():
     cookies_file = get_cookies_file()
     if cookies_file:
         ydl_opts['cookiefile'] = cookies_file
+
+    # imageio ile gelen ffmpeg binary'sini kullan
+    if FFMPEG_PATH:
+        ydl_opts['ffmpeg_location'] = FFMPEG_PATH
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
