@@ -1,23 +1,18 @@
 # ============================================================
-#  YouTube → MP3 İndirici  |  PythonAnywhere Flask Uygulaması
+#  YouTube → MP3 İndirici  |  Render Flask Uygulaması
 # ============================================================
 #
-#  KURULUM (PythonAnywhere Bash Console):
-#  1. pip install yt-dlp flask
-#  2. Bu dosyayı /home/<kullanıcı_adın>/flask_app.py olarak kaydet
-#  3. Web sekmesinden "Reload" butonuna bas
+#  Render Environment Variables:
+#    YT_COOKIES  →  cookies.txt içeriğini buraya yapıştır
 #
-#  NOT: YouTube erişimi için Hacker planı veya üstü gereklidir
-#       (Ücretsiz planda dış internet kısıtlıdır).
-#  NOT: MP3 dönüşümü için ffmpeg gerekir. PythonAnywhere'de
-#       /usr/bin/ffmpeg veya /usr/local/bin/ffmpeg yoluna bak.
-#       Yoksa: format='bestaudio/best' ile m4a/webm indirir.
+#  Start Command: gunicorn app:app --timeout 120
 # ============================================================
 
 import os
 import re
 import uuid
 import time
+import tempfile
 import threading
 from flask import Flask, request, jsonify, send_file, render_template_string
 
@@ -28,8 +23,8 @@ except ImportError:
 
 app = Flask(__name__)
 
-# İndirilen dosyalar için klasör (home dizini altında)
-DOWNLOAD_FOLDER = os.path.join(os.path.expanduser('~'), 'yt_mp3_temp')
+# İndirilen dosyalar için klasör
+DOWNLOAD_FOLDER = '/tmp/yt_mp3_temp'
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 # ---------------------------------------------------------------
@@ -56,6 +51,21 @@ cleanup_thread.start()
 def safe_name(s):
     s = re.sub(r'[^\w\s\-]', '', s, flags=re.UNICODE)
     return s.strip()[:60] or 'audio'
+
+# ---------------------------------------------------------------
+# Çerez dosyası (Render env var'dan)
+# ---------------------------------------------------------------
+def get_cookies_file():
+    content = os.environ.get('YT_COOKIES', '').strip()
+    if not content:
+        return None
+    content = content.replace('\\n', '\n')
+    tmp = tempfile.NamedTemporaryFile(
+        mode='w', suffix='.txt', delete=False, encoding='utf-8'
+    )
+    tmp.write(content)
+    tmp.close()
+    return tmp.name
 
 # ---------------------------------------------------------------
 # HTML Arayüz
@@ -438,6 +448,11 @@ def api_download():
         }],
     }
 
+    # YouTube bot korumasını aşmak için çerezleri kullan
+    cookies_file = get_cookies_file()
+    if cookies_file:
+        ydl_opts['cookiefile'] = cookies_file
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info  = ydl.extract_info(url, download=True)
@@ -452,7 +467,14 @@ def api_download():
                 ext   = info.get('ext', 'webm')
                 fmt   = ext
         except Exception as exc2:
+            if cookies_file:
+                try: os.remove(cookies_file)
+                except: pass
             return jsonify({'error': str(exc2)}), 500
+    finally:
+        if cookies_file:
+            try: os.remove(cookies_file)
+            except: pass
 
     # İndirilen dosyayı bul
     found_path = None
